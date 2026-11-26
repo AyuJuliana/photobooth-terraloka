@@ -1,0 +1,5 @@
+node_modules
+photos
+.vercel
+.env*
+.DS_Store
