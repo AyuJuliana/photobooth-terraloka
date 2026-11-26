@@ -47,10 +47,10 @@
   }
   .field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 120px; }
   .start { width: 100%; min-height: 70px; font-size: 30px; font-weight: 700; letter-spacing: .04em; }
-  .circles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .circles { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; }
   .circles button {
     display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; cursor: pointer;
-    font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+    font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); line-height: 1.15; text-align: center;
   }
   .circles .dot {
     width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -272,7 +272,8 @@
   // ---------- Fun face filters (MediaPipe face detector; stickers follow each face) ----------
   const FUN = {
     none: { name: 'None', emo: '🙂' }, caping: { name: 'Petani', emo: '🧑‍🌾' }, cow: { name: 'Cow', emo: '🐮' },
-    chicken: { name: 'Chicken', emo: '🐔' }, duck: { name: 'Duck', emo: '🦆' }, sunflower: { name: 'Sunflower', emo: '🌻' },
+    chicken: { name: 'Chicken', emo: '🐔' }, sunflower: { name: 'Sunflower', emo: '🌻' },
+    animal: { name: 'Which animal?', emo: '🎲' }, family: { name: 'Farm Family', emo: '👨‍🌾' },
   };
   let funId = 'none', faces = [];
   const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
@@ -285,7 +286,37 @@
     ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
     ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
   }
+  // Group modes give each tracked face its own role; the role sticks to that face while it stays in view.
+  const ANIMALS = ['cow', 'chicken', 'duck', 'pig', 'sheep'];
+  const FAMILY = ['cow', 'chicken', 'pig', 'scarecrow', 'tractor', 'duck', 'sheep'];
+  const TAGS = { caping: 'Farmer', cow: 'Cow', chicken: 'Chicken', duck: 'Duck', pig: 'Pig', sheep: 'Sheep', scarecrow: 'Scarecrow', tractor: 'Tractor' };
+  function lookFor(face) {
+    if (funId === 'animal') {
+      if (!face.animal) {
+        const taken = faces.map((f) => f.animal), free = ANIMALS.filter((a) => !taken.includes(a));
+        const pool = free.length ? free : ANIMALS; face.animal = pool[Math.floor(Math.random() * pool.length)];
+      }
+      return { look: face.animal, tag: `I'm a ${TAGS[face.animal]}!` };
+    }
+    if (funId === 'family') {
+      if (!face.role) {
+        const taken = faces.map((f) => f.role);
+        face.role = !taken.includes('caping') ? 'caping' : (FAMILY.find((r) => !taken.includes(r)) || FAMILY[face.id % FAMILY.length]);
+      }
+      return { look: face.role, tag: TAGS[face.role] };
+    }
+    return { look: funId };
+  }
+  function nameTag(ctx, text, p, size, rot) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot);
+    ctx.font = `400 ${size}px ${DISPLAY}`; const tw = ctx.measureText(text).width, pw = tw + size * 0.9, ph = size * 1.35;
+    ctx.fillStyle = BROWN_DARK; ctx.beginPath(); ctx.roundRect(-pw / 2 + 3, -ph / 2 + 4, pw, ph, ph / 2); ctx.fill();
+    ctx.fillStyle = LIME; ctx.beginPath(); ctx.roundRect(-pw / 2, -ph / 2, pw, ph, ph / 2); ctx.fill();
+    ctx.fillStyle = BROWN_DARK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, 0, size * 0.06);
+    ctx.restore();
+  }
   function drawFun(ctx, face, map, sw, sh) {
+    const { look, tag } = lookFor(face);
     const P = (k) => map(face.keypoints[k].x * sw, face.keypoints[k].y * sh);
     let a = P(0), b = P(1);
     if (a.x > b.x) [a, b] = [b, a];
@@ -295,7 +326,7 @@
     const local = (p) => { const dx = p.x - mid.x, dy = p.y - mid.y, c = Math.cos(-ang), s = Math.sin(-ang); return { x: (dx * c - dy * s) / d, y: (dx * s + dy * c) / d }; };
     const at = (x, y) => ({ x: mid.x + (x * Math.cos(ang) - y * Math.sin(ang)) * d, y: mid.y + (x * Math.sin(ang) + y * Math.cos(ang)) * d });
     const ellipse = (x, y, rx, ry, rot, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); ctx.fill(); };
-    if (funId === 'cow') {
+    if (look === 'cow') {
       const n = local(nose);
       face2d(() => {
         for (const sx of [-1, 1]) {
@@ -313,7 +344,7 @@
         ellipse(n.x + 0.22, n.y + 0.3, 0.08, 0.12, 0, '#7a3b3b');
       });
     }
-    if (funId === 'chicken') {
+    if (look === 'chicken') {
       const n = local(nose);
       face2d(() => {
         [[-0.4, -1.55, 0.3], [0, -1.8, 0.36], [0.4, -1.55, 0.3]].forEach(([x, y, rr]) => ellipse(x, y, rr, rr, 0, '#e0302f'));  // comb
@@ -321,7 +352,7 @@
         ellipse(n.x, n.y + 0.72, 0.13, 0.2, 0, '#e0302f');                                                                      // wattle
       });
     }
-    if (funId === 'duck') {
+    if (look === 'duck') {
       const n = local(nose);
       face2d(() => {
         ellipse(n.x, n.y + 0.32, 0.6, 0.25, 0, '#f39c26');                       // bill
@@ -329,15 +360,52 @@
         ellipse(n.x - 0.15, n.y + 0.2, 0.05, 0.03, 0, '#b86b10'); ellipse(n.x + 0.15, n.y + 0.2, 0.05, 0.03, 0, '#b86b10');
         [[-0.15, -1.5, -0.3], [0.05, -1.62, 0], [0.25, -1.5, 0.3]].forEach(([x, y, rot]) => ellipse(x, y, 0.09, 0.26, rot, '#fdfaf3'));  // head tuft
       });
-      emoji(ctx, '🦆', at(1.6, -1.0), d * 0.9, ang);
     }
-    if (funId === 'sunflower') {
+    if (look === 'sunflower') {
       for (let i = 0; i < 7; i++) {   // flower crown: sunflowers and rice stalks on an arc above the head
         const a = Math.PI + (i + 0.5) * (Math.PI / 7);
         emoji(ctx, i % 2 ? '🌾' : '🌻', at(Math.cos(a) * 1.55, -0.45 + Math.sin(a) * 1.25), d * (i % 2 ? 0.6 : 0.75), ang + a + Math.PI / 2);
       }
     }
-    if (funId === 'caping') {
+    if (look === 'pig') {
+      const n = local(nose);
+      face2d(() => {
+        for (const sx of [-1, 1]) {
+          tri(ctx, [[sx * 0.55, -1.15], [sx * 1.35, -1.0], [sx * 1.15, -1.95]], '#f29bb0');
+          tri(ctx, [[sx * 0.75, -1.15], [sx * 1.2, -1.07], [sx * 1.08, -1.6]], '#e0748f');
+          ellipse(sx * 0.85, 0.85, 0.3, 0.17, 0, 'rgba(255, 120, 150, .4)');
+        }
+        ellipse(n.x, n.y + 0.2, 0.42, 0.3, 0, '#f7a8bb');
+        ellipse(n.x - 0.14, n.y + 0.2, 0.07, 0.12, 0, '#b04a66'); ellipse(n.x + 0.14, n.y + 0.2, 0.07, 0.12, 0, '#b04a66');
+      });
+    }
+    if (look === 'sheep') {
+      face2d(() => {
+        for (const sx of [-1, 1]) { ellipse(sx * 1.45, -0.55, 0.5, 0.2, sx * 0.3, '#5b4a42'); ellipse(sx * 1.45, -0.55, 0.32, 0.11, sx * 0.3, '#e9b3b3'); }
+        ctx.strokeStyle = 'rgba(120, 110, 100, .35)'; ctx.lineWidth = 0.04;
+        [[-1.05, -1.0], [-0.55, -1.35], [0, -1.5], [0.55, -1.35], [1.05, -1.0], [-0.3, -1.05], [0.3, -1.05], [-0.8, -1.55], [0.8, -1.55], [0, -1.95], [-0.45, -1.85], [0.45, -1.85]]
+          .forEach(([x, y]) => { ctx.fillStyle = '#fdfaf3'; ctx.beginPath(); ctx.arc(x, y, 0.36, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+      });
+    }
+    if (look === 'scarecrow') {
+      face2d(() => {
+        ctx.strokeStyle = '#d9b44a'; ctx.lineWidth = 0.07; ctx.lineCap = 'round';   // straw poking out under the hat
+        for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) {
+          ctx.beginPath(); ctx.moveTo(sx * 1.05, -0.95 + i * 0.07); ctx.lineTo(sx * (1.55 + (i % 3) * 0.15), -0.7 + i * 0.22); ctx.stroke();
+        }
+        ellipse(0, -1.05, 2.05, 0.3, 0, '#a77b3e');                                        // brim
+        ctx.fillStyle = '#c4954f'; ctx.beginPath(); ctx.roundRect(-1.0, -2.15, 2.0, 1.15, [0.45, 0.45, 0.05, 0.05]); ctx.fill();
+        ctx.fillStyle = '#7a3b2a'; ctx.fillRect(-1.0, -1.38, 2.0, 0.24);                    // hat band
+        ctx.fillStyle = '#6b8ac9'; ctx.fillRect(0.3, -1.95, 0.4, 0.34);                     // patch
+        ctx.strokeStyle = '#3d2818'; ctx.lineWidth = 0.035; ctx.setLineDash([0.07, 0.06]); ctx.strokeRect(0.3, -1.95, 0.4, 0.34); ctx.setLineDash([]);
+        for (const sx of [-1, 1]) ellipse(sx * 0.85, 0.8, 0.22, 0.22, 0, 'rgba(220, 70, 60, .45)');
+      });
+    }
+    if (look === 'tractor') {
+      emoji(ctx, '🚜', at(0, -1.75), d * 1.9, ang);
+      face2d(() => { [[-1.2, -2.6, 0.22], [-1.5, -3.0, 0.3], [-1.95, -3.35, 0.38]].forEach(([x, y, rr]) => ellipse(x, y, rr, rr * 0.8, 0, 'rgba(240, 235, 225, .85)')); });
+    }
+    if (look === 'caping') {
       face2d(() => {
         const g = ctx.createLinearGradient(0, -2.3, 0, -0.85); g.addColorStop(0, '#f3d98f'); g.addColorStop(1, '#c4913f');
         tri(ctx, [[0, -2.3], [2.3, -0.85], [-2.3, -0.85]], g);
@@ -347,16 +415,17 @@
       });
       emoji(ctx, '🌾', at(1.55, -0.95), d * 0.9, ang + 0.4);
     }
+    if (tag) nameTag(ctx, tag, at(0, 2.15), d * 0.42, ang);
   }
   let detector = null, detectorState = 'idle', lastVideoTime = -1;
   const toast = (msg) => { $('toast').textContent = msg; };
+  const MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
   async function loadDetector() {
     if (detectorState !== 'idle') return;
     detectorState = 'loading'; toast('Loading fun filters…');
-    const base = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
     try {
-      const vision = await import(`${base}/vision_bundle.mjs`);
-      const fileset = await vision.FilesetResolver.forVisionTasks(`${base}/wasm`);
+      const vision = await import(`${MP_BASE}/vision_bundle.mjs`);
+      const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
       const make = (delegate) => vision.FaceDetector.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite', delegate },
         runningMode: 'VIDEO', minDetectionConfidence: 0.35,
@@ -365,23 +434,34 @@
       detectorState = 'ready'; toast('');
     } catch (e) { console.error(e); detectorState = 'idle'; toast('Fun filters need an internet connection — tap again to retry'); }
   }
+  // Match detections to last frame's faces by position, so each person keeps their sticker (and role).
+  let tracks = [], nextFaceId = 1;
+  const eyeMid = (f) => ({ x: (f.keypoints[0].x + f.keypoints[1].x) / 2, y: (f.keypoints[0].y + f.keypoints[1].y) / 2 });
+  function track(found) {
+    const pending = tracks.slice(), next = [];
+    for (const det of found) {
+      const c = eyeMid(det); let best = null, bd = 0.18;
+      for (const t of pending) { const tc = eyeMid(t), dd = Math.hypot(tc.x - c.x, tc.y - c.y); if (dd < bd) { bd = dd; best = t; } }
+      if (best && best.keypoints.length === det.keypoints.length) {
+        pending.splice(pending.indexOf(best), 1);
+        best.keypoints = det.keypoints.map((k, j) => ({ x: best.keypoints[j].x * 0.4 + k.x * 0.6, y: best.keypoints[j].y * 0.4 + k.y * 0.6 }));
+        best.missed = 0; next.push(best);
+      } else next.push({ id: nextFaceId++, keypoints: det.keypoints.map((k) => ({ x: k.x, y: k.y })), missed: 0 });
+    }
+    for (const t of pending) if (++t.missed < 30) next.push(t);   // remember briefly so a blink-out doesn't re-roll roles
+    tracks = next; faces = tracks.filter((t) => !t.missed);
+  }
   function detectFaces() {
-    if (!detector || funId === 'none' || video.readyState < 2 || video.currentTime === lastVideoTime) return;
+    if (funId === 'none' || video.readyState < 2 || video.currentTime === lastVideoTime) return;
     lastVideoTime = video.currentTime;
-    try {
-      const found = detector.detectForVideo(video, performance.now()).detections || [];
-      faces = found.map((f, i) => {
-        const prev = faces[i];
-        if (!prev || prev.keypoints.length !== f.keypoints.length) return f;
-        return { keypoints: f.keypoints.map((k, j) => ({ x: prev.keypoints[j].x * 0.4 + k.x * 0.6, y: prev.keypoints[j].y * 0.4 + k.y * 0.6 })) };
-      });
-    } catch (e) { console.error(e); }
+    try { if (detector) track(detector.detectForVideo(video, performance.now()).detections || []); } catch (e) { console.error(e); }
   }
   $('fun').innerHTML = Object.entries(FUN).map(([id, f]) =>
     `<button data-id="${id}" class="${id === funId ? 'active' : ''}"><span class="dot">${f.emo}</span>${f.name}</button>`).join('');
   $('fun').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b || busy) return;
-    funId = b.dataset.id; faces = [];
+    if (b.dataset.id === funId) tracks.forEach((t) => { delete t.animal; delete t.role; });   // tap again to re-roll
+    funId = b.dataset.id;
     [...$('fun').children].forEach((x) => x.classList.toggle('active', x === b));
     if (funId !== 'none') loadDetector();
   });
