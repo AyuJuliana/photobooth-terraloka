@@ -241,7 +241,8 @@
   const EXTRA = ['🌾', '🌱', '🍃', '⭐', '💚', '🌸'];   // extra emoji stickers
 
   // ---------- State ----------
-  const shotCount = 4, timer = 3;   // fixed: 4 photos, 3-second countdown
+  const timer = 3;                  // 3-second countdown
+  let shotCount = 4;                // set by the chosen frame (most take 4, Soil Trio takes 3)
   let mirror = true, flashOn = true;
   let shots = [];          // captured canvases
   let busy = false;
@@ -519,7 +520,7 @@
   const lctx = live.getContext('2d');
   const stageStickerCache = {};
   function stageStickers(fid = frameId) {
-    if (!stageStickerCache[fid]) { const { w, h } = FRAMES[fid].size(shotCount); stageStickerCache[fid] = autoStickers(w, h, shotCount, 7, fid); }
+    if (!stageStickerCache[fid]) { const n = shotsFor(fid), { w, h } = FRAMES[fid].size(n); stageStickerCache[fid] = autoStickers(w, h, n, 7, fid); }
     return stageStickerCache[fid];
   }
   function fitStage() { const { w, h } = FRAMES[frameId].size(shotCount); $('stage').style.setProperty('--ar', (w / h).toFixed(4)); }
@@ -613,19 +614,24 @@
         const [cols, rows] = gridFor(n, true), cw = (STRIP_W - STRIP_PAD * 2 - STRIP_GAP * (cols - 1)) / cols, ch = cw * 0.75;
         return { w: STRIP_W, h: STRIP_PAD + rows * ch + (rows - 1) * STRIP_GAP + STRIP_FOOT };
       },
-      draw(ctx, w, h, place, n) {
+      draw(ctx, w, h, place, n, sub = 'soil buddies') {
         ctx.drawImage(paper(w, h, CREAM, 7), 0, 0);
         const [cols, rows] = gridFor(n, true);
         place(STRIP_PAD, STRIP_PAD, w - STRIP_PAD * 2, h - STRIP_PAD - STRIP_FOOT, 6, cols, rows, BROWN_DARK);
         const fy = h - STRIP_FOOT;
         labelBar(ctx, 'TERRALOKA', w / 2 - 40, fy + 110, -0.08, LIME, BROWN_DARK, 70);
-        labelBar(ctx, 'soil buddies', w / 2 + 70, fy + 205, 0.05, BROWN, '#fff7e8', 50);
+        labelBar(ctx, sub, w / 2 + 70, fy + 205, 0.05, BROWN, '#fff7e8', 50);
         ctx.fillStyle = BROWN; ctx.font = `400 26px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(`healthy soil, happy rice  ·  ${today()}`, w / 2, h - 50);
         doodleStar(ctx, 80, fy + 70, 30, '#8bb22a', 0.3);
         sparkle(ctx, w - 70, fy + 60, 26, '#e98aa0');
         sparkle(ctx, 110, fy + 250, 18, '#8bb22a');
       },
+    },
+    trio: {
+      name: 'Soil Trio', tall: true, shots: 3,   // same Soil Buddies strip, 3 photos
+      size(n) { return FRAMES.soil.size(n); },
+      draw(ctx, w, h, place, n) { FRAMES.soil.draw(ctx, w, h, place, n, 'soil trio'); },
     },
     garden: {
       name: 'Rice Garden', tall: true,
@@ -765,12 +771,14 @@
   }
   function openCustomize() {
     show('customizeView');
+    [...$('frameChips').children].forEach((b) => { b.hidden = shotsFor(b.dataset.id) !== shots.length; });
     stickers = stageStickers().map((s) => ({ ...s })); selectedSticker = null; $('removeBtn').disabled = true; redraw();
   }
   $('frameChips').innerHTML = Object.entries(FRAMES).map(([id, f]) =>
     `<button data-id="${id}" class="${id === frameId ? 'active' : ''}">${f.name}</button>`).join('');
+  const shotsFor = (fid) => FRAMES[fid].shots || 4;
   function setFrame(id) {
-    frameId = id; fitStage();
+    frameId = id; shotCount = shotsFor(id); fitStage(); updateProgress();
     [...$('frameChips').children, ...$('framePicker').children].forEach((x) => x.classList.toggle('active', x.dataset.id === id));
   }
   $('frameChips').addEventListener('click', (e) => {
@@ -780,14 +788,14 @@
 
   // Frame picker on the camera screen: a rendered preview of each frame (empty photo slots + soil buddies).
   $('framePicker').innerHTML = Object.entries(FRAMES).map(([id, f]) => {
-    const { w, h } = f.size(shotCount);
+    const { w, h } = f.size(shotsFor(id));
     return `<button data-id="${id}" class="${id === frameId ? 'active' : ''}" title="${f.name}">
       <div class="pv"><canvas width="${w}" height="${h}"></canvas></div><span>${f.name}</span></button>`;
   }).join('');
   function renderFramePreviews() {
     [...$('framePicker').children].forEach((b) => {
-      const c = b.querySelector('canvas'), fid = b.dataset.id, { w, h } = FRAMES[fid].size(shotCount);
-      compose(c.getContext('2d'), { exporting: true, fid, photos: [], stk: autoStickers(w, h, shotCount, 42, fid) });
+      const c = b.querySelector('canvas'), fid = b.dataset.id, n = shotsFor(fid), { w, h } = FRAMES[fid].size(n);
+      compose(c.getContext('2d'), { exporting: true, fid, photos: [], n, stk: autoStickers(w, h, n, 42, fid) });
     });
   }
   $('framePicker').addEventListener('click', (e) => {
