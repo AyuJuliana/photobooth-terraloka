@@ -20,8 +20,8 @@
   .progress { font-family: var(--display); font-size: 40px; font-weight: 700; color: var(--brown); line-height: 1; }
   .progress span { color: var(--accent); }
   .stage {
-    position: relative; width: 100%; max-width: calc((100vh - 290px) * 4 / 3); aspect-ratio: 4 / 3;
-    border-radius: 26px; overflow: hidden; background: #1d140e;
+    --ar: 0.31; position: relative; width: 100%; max-width: calc((100vh - 200px) * var(--ar)); aspect-ratio: var(--ar);
+    border-radius: 10px; overflow: hidden; background: #1d140e; container-type: inline-size;
     box-shadow: 0 0 0 6px var(--card), 0 0 0 8px var(--card-line), 0 24px 50px rgba(61, 40, 24, .28);
   }
   .stage canvas { width: 100%; height: 100%; display: block; }
@@ -32,19 +32,11 @@
   .cam-msg p { color: #d9c9b6; max-width: 40ch; }
   .countdown {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
-    font-family: var(--display); font-size: min(26vh, 200px); font-weight: 700; color: var(--lime);
+    font-family: var(--display); font-size: min(26vh, 200px, 70cqw); font-weight: 700; color: var(--lime);
     text-shadow: 0 6px 0 var(--brown-dark), 0 16px 40px rgba(0, 0, 0, .5);
   }
   .countdown span { animation: tick 1s ease-out forwards; }
   @keyframes tick { from { transform: scale(1.6); opacity: 0; } 25% { transform: scale(1); opacity: 1; } to { opacity: .25; } }
-  .shots { display: flex; gap: 10px; min-height: 66px; }
-  .shots div {
-    width: 88px; height: 66px; border-radius: 10px; background: rgba(61, 40, 24, .08);
-    border: 2px dashed rgba(61, 40, 24, .25); overflow: hidden; display: flex; align-items: center; justify-content: center;
-    font-family: var(--display); font-weight: 700; color: rgba(61, 40, 24, .35);
-  }
-  .shots div.done { border: 2px solid var(--brown); }
-  .shots img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   .controls { display: flex; flex-direction: column; gap: 18px; background: rgba(255, 250, 241, .72); border: 1.5px solid var(--card-line); border-radius: 26px; padding: 22px; backdrop-filter: blur(6px); }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -67,6 +59,17 @@
   }
   .circles button.active { color: var(--brown-dark); }
   .circles button.active .dot { border-color: var(--brown); box-shadow: 0 0 0 3px var(--lime); }
+  .frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+  .frames button {
+    min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px;
+    background: var(--card); border: 2px solid var(--card-line); border-radius: 14px; cursor: pointer;
+    font: inherit; font-size: 11px; font-weight: 600; color: var(--muted); transition: .15s;
+  }
+  .frames button:hover { border-color: var(--brown); }
+  .frames button.active { border-color: var(--brown); box-shadow: 0 0 0 3px var(--lime); color: var(--brown-dark); }
+  .frames .pv { width: 100%; height: 120px; display: flex; align-items: center; justify-content: center; }
+  .frames canvas { max-width: 100%; max-height: 100%; display: block; border-radius: 3px; box-shadow: 0 3px 8px rgba(61, 40, 24, .2); }
+  .frames span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .toast { font-size: 13px; color: var(--accent); font-weight: 600; min-height: 1em; text-align: center; }
   .hint { font-size: 13px; text-align: center; }
 
@@ -130,12 +133,12 @@
     .progress { font-size: 30px; }
     .controls { gap: 12px; padding: 16px; }
     .start { min-height: 58px; font-size: 24px; }
+    .frames .pv { height: 96px; }
     .circles .dot { width: 42px; height: 42px; font-size: 22px; }
   }
   @media (max-width: 900px) {
     header, main, .strip { padding-left: 16px; padding-right: 16px; }
     #cameraView, #customizeView, #resultView { grid-template-columns: 1fr; }
-    .stage { max-width: 100%; }
     .canvas-wrap, .result-img-wrap { height: 70vh; }
     .custom-panel { max-height: none; }
     .qr { width: min(80vw, 320px); }
@@ -152,7 +155,7 @@
   <main id="cameraView">
     <div class="left">
       <div class="progress" id="progress"><span>0</span>/4</div>
-      <div class="stage">
+      <div class="stage" id="stage">
         <canvas id="preview" width="1200" height="900"></canvas>
         <div class="cam-msg" id="camError" hidden>
           <h3 style="font-size:24px">Camera not available</h3>
@@ -161,15 +164,10 @@
         </div>
         <div class="countdown" id="countdown"></div>
       </div>
-      <div class="shots" id="shots"></div>
     </div>
 
     <div class="controls">
-      <div class="row">
-        <label class="field"><span class="label">Photos</span><select id="countSelect"></select></label>
-        <label class="field"><span class="label">Timer</span>
-          <select id="timerSelect"><option value="3">3s</option><option value="5">5s</option><option value="10">10s</option></select></label>
-      </div>
+      <div><span class="label">Choose your frame</span><div class="frames" id="framePicker" style="margin-top:8px"></div></div>
       <select id="cameraSelect" hidden aria-label="Camera"></select>
       <button class="btn start" id="start">START</button>
       <div class="row center">
@@ -243,7 +241,8 @@
   const EXTRA = ['🌾', '🌱', '🍃', '⭐', '💚', '🌸'];   // extra emoji stickers
 
   // ---------- State ----------
-  let shotCount = 4, timer = 3, mirror = true, flashOn = true;
+  const shotCount = 4, timer = 3;   // fixed: 4 photos, 3-second countdown
+  let mirror = true, flashOn = true;
   let shots = [];          // captured canvases
   let busy = false;
 
@@ -272,8 +271,8 @@
 
   // ---------- Fun face filters (MediaPipe face detector; stickers follow each face) ----------
   const FUN = {
-    none: { name: 'None', emo: '🙂' }, shades: { name: 'Shades', emo: '😎' }, crown: { name: 'Crown', emo: '👑' },
-    cat: { name: 'Kitty', emo: '🐱' }, caping: { name: 'Petani', emo: '🌾' }, love: { name: 'Love', emo: '🥰' },
+    none: { name: 'None', emo: '🙂' }, caping: { name: 'Petani', emo: '🧑‍🌾' }, cow: { name: 'Cow', emo: '🐮' },
+    chicken: { name: 'Chicken', emo: '🐔' }, duck: { name: 'Duck', emo: '🦆' }, sunflower: { name: 'Sunflower', emo: '🌻' },
   };
   let funId = 'none', faces = [];
   const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
@@ -295,21 +294,48 @@
     const face2d = (fn) => { ctx.save(); ctx.translate(mid.x, mid.y); ctx.rotate(ang); ctx.scale(d, d); fn(); ctx.restore(); };
     const local = (p) => { const dx = p.x - mid.x, dy = p.y - mid.y, c = Math.cos(-ang), s = Math.sin(-ang); return { x: (dx * c - dy * s) / d, y: (dx * s + dy * c) / d }; };
     const at = (x, y) => ({ x: mid.x + (x * Math.cos(ang) - y * Math.sin(ang)) * d, y: mid.y + (x * Math.sin(ang) + y * Math.cos(ang)) * d });
-    if (funId === 'shades') emoji(ctx, '🕶️', at(0, 0.08), d * 2.3, ang);
-    if (funId === 'crown') emoji(ctx, '👑', at(0, -1.55), d * 1.9, ang);
-    if (funId === 'cat') {
+    const ellipse = (x, y, rx, ry, rot, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); ctx.fill(); };
+    if (funId === 'cow') {
       const n = local(nose);
       face2d(() => {
         for (const sx of [-1, 1]) {
-          tri(ctx, [[sx * 0.4, -1.0], [sx * 1.35, -1.15], [sx * 1.05, -2.15]], '#f0a35e');
-          tri(ctx, [[sx * 0.62, -1.1], [sx * 1.2, -1.2], [sx * 1.03, -1.8]], '#ffc0cb');
+          // horns
+          ctx.fillStyle = '#efe2bd'; ctx.strokeStyle = '#8a6a3e'; ctx.lineWidth = 0.04;
+          ctx.beginPath(); ctx.moveTo(sx * 0.45, -1.35); ctx.quadraticCurveTo(sx * 0.75, -2.05, sx * 1.1, -2.1);
+          ctx.quadraticCurveTo(sx * 0.95, -1.7, sx * 0.85, -1.3); ctx.closePath(); ctx.fill(); ctx.stroke();
+          // floppy ears
+          ellipse(sx * 1.5, -0.95, 0.55, 0.24, sx * 0.45, '#fdfaf3');
+          ellipse(sx * 1.5, -0.95, 0.36, 0.13, sx * 0.45, '#f4b6b6');
         }
-        ctx.fillStyle = '#ff8fab'; ctx.beginPath(); ctx.ellipse(n.x, n.y - 0.05, 0.16, 0.11, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = 'rgba(40, 25, 20, .85)'; ctx.lineWidth = 0.035; ctx.lineCap = 'round';
-        for (const sx of [-1, 1]) for (const k of [-0.12, 0, 0.12]) {
-          ctx.beginPath(); ctx.moveTo(n.x + sx * 0.3, n.y + 0.08 + k * 0.4); ctx.lineTo(n.x + sx * 1.05, n.y + 0.02 + k * 1.3); ctx.stroke();
-        }
+        ellipse(-0.55, -1.2, 0.32, 0.22, 0.4, '#2b2420');   // forehead patch
+        ellipse(n.x, n.y + 0.3, 0.62, 0.38, 0, '#f6b8b8');  // snout
+        ellipse(n.x - 0.22, n.y + 0.3, 0.08, 0.12, 0, '#7a3b3b');
+        ellipse(n.x + 0.22, n.y + 0.3, 0.08, 0.12, 0, '#7a3b3b');
       });
+    }
+    if (funId === 'chicken') {
+      const n = local(nose);
+      face2d(() => {
+        [[-0.4, -1.55, 0.3], [0, -1.8, 0.36], [0.4, -1.55, 0.3]].forEach(([x, y, rr]) => ellipse(x, y, rr, rr, 0, '#e0302f'));  // comb
+        tri(ctx, [[n.x - 0.28, n.y + 0.02], [n.x + 0.28, n.y + 0.02], [n.x, n.y + 0.5]], '#f5a623');                           // beak
+        ellipse(n.x, n.y + 0.72, 0.13, 0.2, 0, '#e0302f');                                                                      // wattle
+      });
+    }
+    if (funId === 'duck') {
+      const n = local(nose);
+      face2d(() => {
+        ellipse(n.x, n.y + 0.32, 0.6, 0.25, 0, '#f39c26');                       // bill
+        ctx.strokeStyle = '#b86b10'; ctx.lineWidth = 0.035; ctx.beginPath(); ctx.moveTo(n.x - 0.5, n.y + 0.32); ctx.lineTo(n.x + 0.5, n.y + 0.32); ctx.stroke();
+        ellipse(n.x - 0.15, n.y + 0.2, 0.05, 0.03, 0, '#b86b10'); ellipse(n.x + 0.15, n.y + 0.2, 0.05, 0.03, 0, '#b86b10');
+        [[-0.15, -1.5, -0.3], [0.05, -1.62, 0], [0.25, -1.5, 0.3]].forEach(([x, y, rot]) => ellipse(x, y, 0.09, 0.26, rot, '#fdfaf3'));  // head tuft
+      });
+      emoji(ctx, '🦆', at(1.6, -1.0), d * 0.9, ang);
+    }
+    if (funId === 'sunflower') {
+      for (let i = 0; i < 7; i++) {   // flower crown: sunflowers and rice stalks on an arc above the head
+        const a = Math.PI + (i + 0.5) * (Math.PI / 7);
+        emoji(ctx, i % 2 ? '🌾' : '🌻', at(Math.cos(a) * 1.55, -0.45 + Math.sin(a) * 1.25), d * (i % 2 ? 0.6 : 0.75), ang + a + Math.PI / 2);
+      }
     }
     if (funId === 'caping') {
       face2d(() => {
@@ -320,14 +346,6 @@
         ctx.fillStyle = '#8b5a24'; ctx.beginPath(); ctx.ellipse(0, -0.85, 2.3, 0.12, 0, 0, Math.PI * 2); ctx.fill();
       });
       emoji(ctx, '🌾', at(1.55, -0.95), d * 0.9, ang + 0.4);
-    }
-    if (funId === 'love') {
-      face2d(() => {
-        ctx.fillStyle = 'rgba(255, 105, 140, .45)';
-        for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * 0.75, 0.85, 0.36, 0.2, 0, 0, Math.PI * 2); ctx.fill(); }
-      });
-      const t = performance.now() / 600;
-      [[-1.3, -1.25, 0], [0, -1.7, 1.7], [1.3, -1.25, 3.4]].forEach(([x, y, ph]) => emoji(ctx, '💖', at(x, y + Math.sin(t + ph) * 0.12), d * 0.75, ang));
     }
   }
   let detector = null, detectorState = 'idle', lastVideoTime = -1;
@@ -408,23 +426,32 @@
   $('cameraSelect').addEventListener('change', (e) => startCamera(e.target.value));
 
   // ---------- Camera controls ----------
-  $('countSelect').innerHTML = [1, 2, 3, 4, 6].map((n) => `<option value="${n}" ${n === shotCount ? 'selected' : ''}>${n} photo${n > 1 ? 's' : ''}</option>`).join('');
-  $('countSelect').addEventListener('change', (e) => { if (!busy) { shotCount = +e.target.value; shots = []; updateProgress(); } });
-  $('timerSelect').addEventListener('change', (e) => { timer = +e.target.value; });
   $('mirrorBtn').addEventListener('click', () => { mirror = !mirror; $('mirrorBtn').textContent = `Mirror: ${mirror ? 'On' : 'Off'}`; $('mirrorBtn').classList.toggle('on', mirror); });
   $('flashBtn').addEventListener('click', () => { flashOn = !flashOn; $('flashBtn').textContent = `Flash: ${flashOn ? 'On' : 'Off'}`; $('flashBtn').classList.toggle('on', flashOn); });
   $('mirrorBtn').classList.add('on'); $('flashBtn').classList.add('on');
 
   function updateProgress() {
     $('progress').innerHTML = `<span>${shots.length}</span>/${shotCount}`;
-    $('shots').innerHTML = Array.from({ length: shotCount }, (_, i) =>
-      shots[i] ? `<div class="done"><img src="${shots[i].toDataURL('image/jpeg', 0.6)}" alt=""></div>` : `<div>${i + 1}</div>`).join('');
   }
 
-  (function loop() {
-    if (!$('cameraView').hidden && video.readyState >= 2) { detectFaces(); drawLive(pctx, 0, 0, SHOT_W, SHOT_H); }
+  // The stage shows the chosen frame: taken photos in their slots, the live camera in the rest.
+  const live = document.createElement('canvas'); live.width = SHOT_W; live.height = SHOT_H;
+  const lctx = live.getContext('2d');
+  const stageStickerCache = {};
+  function stageStickers(fid = frameId) {
+    if (!stageStickerCache[fid]) { const { w, h } = FRAMES[fid].size(shotCount); stageStickerCache[fid] = autoStickers(w, h, shotCount, 7, fid); }
+    return stageStickerCache[fid];
+  }
+  function fitStage() { const { w, h } = FRAMES[frameId].size(shotCount); $('stage').style.setProperty('--ar', (w / h).toFixed(4)); }
+  function loop() {
+    if (!$('cameraView').hidden) {
+      if (video.readyState >= 2) { detectFaces(); drawLive(lctx, 0, 0, SHOT_W, SHOT_H); }
+      else { lctx.fillStyle = '#1d140e'; lctx.fillRect(0, 0, SHOT_W, SHOT_H); }
+      const photos = Array.from({ length: shotCount }, (_, i) => shots[i] || live);
+      compose(pctx, { exporting: true, photos, n: shotCount, stk: stageStickers(), current: shots.length });
+    }
     requestAnimationFrame(loop);
-  })();
+  }
 
   // ---------- Shooting ----------
   async function start() {
@@ -449,8 +476,8 @@
   // ---------- Frames ----------
   // Each frame: size(n) -> {w, h}; draw(ctx, w, h, placePhotos). placePhotos(x, y, w, h, r, cols, rows) fills a grid with the shots.
   const gridFor = (n, tall) => tall
-    ? ({ 1: [1, 1], 2: [1, 2], 3: [1, 3], 4: [1, 4], 6: [2, 3] })[n]
-    : ({ 1: [1, 1], 2: [2, 1], 3: [3, 1], 4: [2, 2], 6: [3, 2] })[n];
+    ? ({ 1: [1, 1], 2: [1, 2], 3: [1, 3], 4: [1, 4] })[n]
+    : ({ 1: [1, 1], 2: [2, 1], 3: [3, 1], 4: [2, 2] })[n];
 
   // Paper texture, cached per size.
   const paperCache = {};
@@ -586,13 +613,13 @@
   // ---------- Stickers (your characters) ----------
   let stickers = [], selectedSticker = null;
   const charById = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
-  function autoStickers(w, h, n, seed = Date.now()) {
-    const r = rng(seed), [cols, rows] = gridFor(n, FRAMES[frameId].tall);
+  function autoStickers(w, h, n, seed = Date.now(), fid = frameId) {
+    const r = rng(seed), [cols, rows] = gridFor(n, FRAMES[fid].tall);
     // Shuffle the creatures (not the flower/worm used in the footer) so buddies don't repeat.
     const pool = CHARACTERS.map((c) => c.id).filter((id) => id !== 'earthworm' && id !== 'group-177');
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     let k = 0; const list = [], pick = () => pool[k++ % pool.length];
-    if (FRAMES[frameId].tall) {
+    if (FRAMES[fid].tall) {
       const ch = (h - STRIP_PAD - STRIP_FOOT - STRIP_GAP * (rows - 1)) / rows;
       // One buddy peeking over each photo edge, alternating sides.
       for (let i = 0; i < rows; i++) {
@@ -620,25 +647,27 @@
   }
 
   // ---------- Compose the final picture ----------
-  function compose(ctx, { exporting = false } = {}) {
-    const f = FRAMES[frameId], { w, h } = f.size(shots.length || shotCount);
+  function compose(ctx, { exporting = false, fid = frameId, stk = stickers, photos = shots, n = photos.length || shotCount, current = -1 } = {}) {
+    const f = FRAMES[fid], { w, h } = f.size(n);
     if (ctx.canvas.width !== w || ctx.canvas.height !== h) { ctx.canvas.width = w; ctx.canvas.height = h; }
     const place = (x, y, aw, ah, r, cols, rows, border) => {
       const gap = rows * cols > 1 ? (f.tall ? STRIP_GAP : 18) : 0;
       const cw = (aw - gap * (cols - 1)) / cols, ch = (ah - gap * (rows - 1)) / rows;
       for (let i = 0; i < cols * rows; i++) {
-        const cx = x + (i % cols) * (cw + gap), cy = y + Math.floor(i / cols) * (ch + gap), shot = shots[i];
+        const cx = x + (i % cols) * (cw + gap), cy = y + Math.floor(i / cols) * (ch + gap), shot = photos[i];
         if (border) { ctx.fillStyle = border; ctx.beginPath(); ctx.roundRect(cx - 7, cy - 7, cw + 14, ch + 14, r + 5); ctx.fill(); }
         ctx.save(); ctx.beginPath(); ctx.roundRect(cx, cy, cw, ch, r); ctx.clip();
         if (shot) {
           const s = Math.max(cw / shot.width, ch / shot.height), dw = shot.width * s, dh = shot.height * s;
           ctx.drawImage(shot, cx + (cw - dw) / 2, cy + (ch - dh) / 2, dw, dh);
         } else { ctx.fillStyle = '#2b2420'; ctx.fillRect(cx, cy, cw, ch); }
+        if (current >= 0 && i > current) { ctx.fillStyle = 'rgba(29, 20, 14, .55)'; ctx.fillRect(cx, cy, cw, ch); }   // upcoming slots: dimmed
         ctx.restore();
+        if (i === current) { ctx.strokeStyle = LIME; ctx.lineWidth = 12; ctx.beginPath(); ctx.roundRect(cx - 6, cy - 6, cw + 12, ch + 12, r + 6); ctx.stroke(); }
       }
     };
-    f.draw(ctx, w, h, place, shots.length || shotCount);
-    stickers.forEach((st) => drawSticker(ctx, st));
+    f.draw(ctx, w, h, place, n);
+    stk.forEach((st) => drawSticker(ctx, st));
     if (!exporting && selectedSticker) {
       const s = selectedSticker;
       ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rot || 0);
@@ -656,15 +685,34 @@
   }
   function openCustomize() {
     show('customizeView');
-    resetStickers(); redraw();
+    stickers = stageStickers().map((s) => ({ ...s })); selectedSticker = null; $('removeBtn').disabled = true; redraw();
   }
   $('frameChips').innerHTML = Object.entries(FRAMES).map(([id, f]) =>
     `<button data-id="${id}" class="${id === frameId ? 'active' : ''}">${f.name}</button>`).join('');
+  function setFrame(id) {
+    frameId = id; fitStage();
+    [...$('frameChips').children, ...$('framePicker').children].forEach((x) => x.classList.toggle('active', x.dataset.id === id));
+  }
   $('frameChips').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    frameId = b.dataset.id;
-    [...$('frameChips').children].forEach((x) => x.classList.toggle('active', x === b));
-    resetStickers(); redraw();
+    setFrame(b.dataset.id); resetStickers(); redraw();
+  });
+
+  // Frame picker on the camera screen: a rendered preview of each frame (empty photo slots + soil buddies).
+  $('framePicker').innerHTML = Object.entries(FRAMES).map(([id, f]) => {
+    const { w, h } = f.size(shotCount);
+    return `<button data-id="${id}" class="${id === frameId ? 'active' : ''}" title="${f.name}">
+      <div class="pv"><canvas width="${w}" height="${h}"></canvas></div><span>${f.name}</span></button>`;
+  }).join('');
+  function renderFramePreviews() {
+    [...$('framePicker').children].forEach((b) => {
+      const c = b.querySelector('canvas'), fid = b.dataset.id, { w, h } = FRAMES[fid].size(shotCount);
+      compose(c.getContext('2d'), { exporting: true, fid, photos: [], stk: autoStickers(w, h, shotCount, 42, fid) });
+    });
+  }
+  $('framePicker').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b || busy) return;
+    setFrame(b.dataset.id);
   });
   $('tray').innerHTML = CHARACTERS.map((c) => `<button data-id="${c.id}" title="${c.name}"><img src="/characters/${c.id}.png" alt="${c.name}"></button>`).join('')
     + EXTRA.map((e) => `<button data-emoji="${e}"><span class="emo">${e}</span></button>`).join('');
@@ -778,11 +826,14 @@
   }
 
   updateProgress();
+  renderFramePreviews();
+  fitStage();
+  loop();
   startCamera();
   refresh();
   setInterval(refresh, 4000);
   // Redraw once fonts and character images arrive.
-  Promise.all([document.fonts?.load(`400 40px ${DISPLAY}`), ...CHARACTERS.map((c) => c.img.decode().catch(() => {}))]).then(() => { if (!$('customizeView').hidden) redraw(); });
+  Promise.all([document.fonts?.load(`400 40px ${DISPLAY}`), ...CHARACTERS.map((c) => c.img.decode().catch(() => {}))]).then(() => { renderFramePreviews(); if (!$('customizeView').hidden) redraw(); });
 </script>
 </body>
 </html>
