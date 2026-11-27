@@ -61,7 +61,7 @@
       <h1>Time's <span class="accent">up</span></h1>
       <p class="muted">Photos are only kept for a short time and this one is gone. Ask the <span class="accent">booth team</span> to take a new one.</p>`;
   };
-  let serverNow = Date.now();
+  let serverNow = Date.now(), timerId = null;
   fetch(`/api/photo?id=${encodeURIComponent(id)}`).then((r) => {
     const d = Date.parse(r.headers.get('date')); if (d) serverNow = d;
     return r.ok ? r.json() : null;
@@ -73,24 +73,45 @@
       timer.hidden = false;
       const tick = () => {
         const s = Math.ceil((deadline - Date.now()) / 1000);
-        if (s <= 0) { clearInterval(t); return gone(); }
+        if (s <= 0) { clearInterval(timerId); return gone(); }
         timer.textContent = `⏳ Save it now · disappears in ${s}s`;
       };
-      const t = setInterval(tick, 1000); tick();
+      timerId = setInterval(tick, 1000); tick();
     }
-    document.getElementById('img').src = photo.img;
+    // Load the photo once into this page. The guest downloads/shares this copy,
+    // and right after that the photo is deleted from the server.
+    const photoBlob = fetch(photo.img).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); });
+    photoBlob.then((b) => { document.getElementById('img').src = URL.createObjectURL(b); }).catch(() => gone());
+    let deleted = false;
+    const deleteFromServer = () => {
+      if (deleted) return; deleted = true;
+      fetch(`/api/delete?id=${encodeURIComponent(id)}`, { method: 'POST', keepalive: true }).catch(() => {});
+      clearInterval(timerId);
+      const tm = document.getElementById('timer'); tm.hidden = false;
+      tm.textContent = '✅ Saved! The photo has been removed from our server.';
+    };
+
     const dl = document.getElementById('download');
     dl.href = photo.download;
     dl.setAttribute('download', `terraloka-${id}`);
+    dl.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        const b = await photoBlob, url = URL.createObjectURL(b), a = document.createElement('a');
+        a.href = url; a.download = `terraloka-${id}`; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        deleteFromServer();
+      } catch { gone(); }
+    });
 
     // Share sheet lets iPhone users save straight to Photos.
     const shareBtn = document.getElementById('share');
     if (navigator.canShare) {
-      fetch(photo.img).then((r) => r.blob()).then((blob) => {
+      photoBlob.then((blob) => {
         const file = new File([blob], `terraloka-${id}`, { type: blob.type || 'image/jpeg' });
         if (!navigator.canShare({ files: [file] })) return;
         shareBtn.hidden = false;
-        shareBtn.onclick = () => navigator.share({ files: [file], title: 'My Terraloka photo' }).catch(() => {});
+        shareBtn.onclick = () => navigator.share({ files: [file], title: 'My Terraloka photo' }).then(deleteFromServer).catch(() => {});
       }).catch(() => {});
     }
   });
