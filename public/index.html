@@ -918,8 +918,7 @@
   fitStage();
   loop();
   startCamera();
-  refresh();
-  setInterval(refresh, 4000);
+  refresh();   // list photos once on load; after that only after each save (each list call is a paid Blob operation)
   // Redraw once fonts and character images arrive.
   Promise.all([document.fonts?.load(`400 40px ${DISPLAY}`), ...CHARACTERS.map((c) => c.img.decode().catch(() => {}))]).then(() => { renderFramePreviews(); if (!$('customizeView').hidden) redraw(); });
 </script>
