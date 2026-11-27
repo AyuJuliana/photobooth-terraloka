@@ -47,6 +47,7 @@
     </a>
     <button class="btn ghost" id="share" hidden>Save to Photos / Share</button>
   </div>
+  <p class="pill" id="timer" hidden></p>
   <p class="hint muted" id="hint">On iPhone, you can also press and hold the photo and choose “Save to Photos”.</p>
 
   <footer class="muted">Terraloka · Photobooth</footer>
@@ -54,13 +55,28 @@
 <script>
   const id = decodeURIComponent(location.pathname.split('/').pop());
 
-  fetch(`/api/photo?id=${encodeURIComponent(id)}`).then((r) => r.ok ? r.json() : null).then((photo) => {
-    if (!photo) {
-      document.querySelector('main').innerHTML = `
-        <img class="icon" src="/icon.png" alt="Terraloka">
-        <h1>Photo not found</h1>
-        <p class="muted">This photo may have been removed. Ask the <span class="accent">booth team</span> for help.</p>`;
-      return;
+  const gone = () => {
+    document.querySelector('main').innerHTML = `
+      <img class="icon" src="/icon.png" alt="Terraloka">
+      <h1>Time's <span class="accent">up</span></h1>
+      <p class="muted">Photos are only kept for a short time and this one is gone. Ask the <span class="accent">booth team</span> to take a new one.</p>`;
+  };
+  let serverNow = Date.now();
+  fetch(`/api/photo?id=${encodeURIComponent(id)}`).then((r) => {
+    const d = Date.parse(r.headers.get('date')); if (d) serverNow = d;
+    return r.ok ? r.json() : null;
+  }).then((photo) => {
+    if (!photo) return gone();
+    // Booth-laptop photos expire: show a countdown (based on the server clock), then remove the photo.
+    if (photo.expiresAt) {
+      const deadline = Date.now() + (photo.expiresAt - serverNow), timer = document.getElementById('timer');
+      timer.hidden = false;
+      const tick = () => {
+        const s = Math.ceil((deadline - Date.now()) / 1000);
+        if (s <= 0) { clearInterval(t); return gone(); }
+        timer.textContent = `⏳ Save it now · disappears in ${s}s`;
+      };
+      const t = setInterval(tick, 1000); tick();
     }
     document.getElementById('img').src = photo.img;
     const dl = document.getElementById('download');

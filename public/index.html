@@ -857,8 +857,8 @@
       const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.9));
       const res = await fetch('/api/upload', { method: 'POST', headers: keyHeaders({ 'X-Filename': 'booth.jpg', 'Content-Type': 'application/octet-stream' }), body: blob });
       if (!res.ok) throw new Error(res.status);
-      const { id, img } = await res.json();
-      imgs[id] = img; shots = []; updateProgress();
+      const { id, img, expiresAt } = await res.json();
+      imgs[id] = img; if (expiresAt) expires[id] = expiresAt; shots = []; updateProgress();
       await refresh(id); showResult(id, true);
     } catch (e) { console.error(e); alert('Could not save the photo. Check the internet connection and try again.'); }
     busy = false; $('doneBtn').disabled = false; $('doneBtn').textContent = 'Done · get my QR ✨';
@@ -873,9 +873,12 @@
     $('resultImg').src = imgs[id] || ''; $('resultQr').src = `/api/qr?id=${enc(id)}`;
     if (animate) $('resultView').querySelectorAll('.result-img-wrap, .scan').forEach((el) => { el.classList.remove('new'); void el.offsetWidth; el.classList.add('new'); });
     markStrip();
+    // Photos that expire (booth laptop mode): count down to when the QR stops working, then go back to the camera.
+    const exp = expires[id], label = exp ? 'QR disappears in' : 'Back to camera in';
+    const secsLeft = () => (exp ? Math.ceil((exp - Date.now()) / 1000) : left);
     let left = RESULT_SECONDS; clearInterval(backTimer);
-    $('backIn').textContent = `Back to camera in ${left}s`;
-    backTimer = setInterval(() => { if (--left <= 0) return showCamera(); $('backIn').textContent = `Back to camera in ${left}s`; }, 1000);
+    $('backIn').textContent = `${label} ${Math.max(0, secsLeft())}s`;
+    backTimer = setInterval(() => { left--; const s = secsLeft(); if (s <= 0) return showCamera(); $('backIn').textContent = `${label} ${s}s`; }, 1000);
   }
   $('again').addEventListener('click', showCamera);
   addEventListener('keydown', (e) => {
@@ -886,7 +889,7 @@
 
   // ---------- Gallery strip ----------
   let photos = [];
-  const imgs = {};
+  const imgs = {}, expires = {};   // id -> image URL / expiry time (ms)
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
   const urlKey = new URLSearchParams(location.search).get('key');
   if (urlKey) { store.set('boothKey', urlKey); history.replaceState(null, '', '/'); }
@@ -906,7 +909,7 @@
       const r = await fetch('/api/photos', { headers: keyHeaders() });
       if (r.status === 401) return askKey();
       const { photos: next } = await r.json();
-      next.forEach((p) => { imgs[p.id] = p.img; });
+      next.forEach((p) => { imgs[p.id] = p.img; if (p.expiresAt) expires[p.id] = p.expiresAt; });
       const changed = next.map((p) => p.id).join() !== photos.map((p) => p.id).join();
       photos = next;
       if (changed) renderStrip();
@@ -918,6 +921,11 @@
   fitStage();
   loop();
   startCamera();
+  // Drop expired photos from the row locally (no server calls).
+  setInterval(() => {
+    const keep = photos.filter((p) => !p.expiresAt || p.expiresAt > Date.now());
+    if (keep.length !== photos.length) { photos = keep; renderStrip(); }
+  }, 1000);
   refresh();   // list photos once on load; after that only after each save (each list call is a paid Blob operation)
   // Redraw once fonts and character images arrive.
   Promise.all([document.fonts?.load(`400 40px ${DISPLAY}`), ...CHARACTERS.map((c) => c.img.decode().catch(() => {}))]).then(() => { renderFramePreviews(); if (!$('customizeView').hidden) redraw(); });
