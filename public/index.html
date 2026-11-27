@@ -851,18 +851,11 @@
 
   // ---------- Save + QR ----------
   let lastSavedId = null;   // the photo just taken; deleted from storage when "Take new photos" is clicked
-  function downloadToMac(blob) {
-    const a = document.createElement('a'), url = URL.createObjectURL(blob);
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    a.href = url; a.download = `terraloka-${stamp}.jpg`; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
   $('doneBtn').addEventListener('click', async () => {
     if (busy) return; busy = true; $('doneBtn').disabled = true; $('doneBtn').textContent = 'Saving…';
     try {
       const out = document.createElement('canvas'); compose(out.getContext('2d'), { exporting: true });
       const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.9));
-      downloadToMac(blob);   // keep a copy on the booth laptop first, even if the upload fails
       const res = await fetch('/api/upload', { method: 'POST', headers: keyHeaders({ 'X-Filename': 'booth.jpg', 'Content-Type': 'application/octet-stream' }), body: blob });
       if (!res.ok) throw new Error(res.status);
       const { id, img, expiresAt } = await res.json();
@@ -889,7 +882,7 @@
     backTimer = setInterval(() => { left--; const s = secsLeft(); if (s <= 0) return showCamera(); $('backIn').textContent = `${label} ${s}s`; }, 1000);
   }
   $('again').addEventListener('click', () => {
-    if (lastSavedId) {   // remove the previous photo from storage (a copy was already downloaded to the Mac)
+    if (lastSavedId) {   // remove the previous photo from storage
       const id = lastSavedId; lastSavedId = null;
       fetch(`/api/delete?id=${enc(id)}`, { method: 'POST', headers: keyHeaders() }).catch(() => {});
       photos = photos.filter((p) => p.id !== id); renderStrip();
