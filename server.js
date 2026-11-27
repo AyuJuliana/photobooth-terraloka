@@ -10,7 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const API = {
   photos: require('./api/photos'), upload: require('./api/upload'),
-  photo: require('./api/photo'), qr: require('./api/qr'),
+  photo: require('./api/photo'), qr: require('./api/qr'), delete: require('./api/delete'),
 };
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript',
